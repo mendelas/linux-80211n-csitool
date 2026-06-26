@@ -119,38 +119,50 @@ ls -l ~/csi.dat   # サイズ > 0 なら記録成功
 > 認証は通るがアソシエーションで落ちるパターン。公共 AP では特に弾かれやすい。
 > 自前ルーター/テザリングでも失敗するなら → **4-B のモニターモードに切り替える**。
 
-### 4-B. モニターモード受信（2台構成・推奨）
+### 4-B. injection 方式（2台の Intel 5300・推奨）
 
-アソシエーション問題を完全に回避できる、CSI 収集の正攻法。**送信機（別 PC / AP / injection 用カード）が必要**。
+アソシエーション問題を完全に回避できる、CSI 収集の正攻法。**両機とも Intel 5300 + CSI tool 導入済み**が前提。
 
 ```
-[送信機] ──── 802.11n HT パケット ───▶ [5300ノートPC(モニターモード)]
-                                          受信 CSI を log_to_file で記録
+[送信5300(TX)] ──── 802.11n HT パケット ───▶ [受信5300(RX, モニターモード)]
+ random_packets で注入                          受信 CSI を log_to_file で記録
 ```
 
-**受信側（5300 ノート PC）:**
+> ⚠️ **インターフェース名:** 公式スクリプトは `wlan0` 前提。`iwconfig` で確認し、`wlan1` なら書き換える:
+> ```bash
+> cd ~/linux-80211n-csitool-supplementary/injection
+> sed -i 's/wlan0/wlan1/g' setup_monitor_csi.sh setup_inject.sh
+> ```
+
+**送信側(TX)の事前ビルド（LORCON + random_packets）:**
 ```bash
-sudo modprobe -r iwlwifi mac80211 cfg80211
-sudo modprobe iwlwifi connector_log=0x1
-# NetworkManager が干渉する場合は: sudo service network-manager stop
-sudo ip link set wlan1 down
-sudo iw dev wlan1 set monitor none
-sudo ip link set wlan1 up
-sudo iw dev wlan1 set channel 64 HT20      # 送信側とチャンネル/帯域を合わせる
-sudo ~/linux-80211n-csitool-supplementary/netlink/log_to_file ~/csi.dat
+sudo apt-get install libpcap-dev
+cd ~ && git clone https://github.com/dhalperi/lorcon-old.git
+cd lorcon-old && ./configure && make && sudo make install && sudo ldconfig
+cd ~/linux-80211n-csitool-supplementary/injection && make
 ```
 
-**送信側（もう 1 台）:**
-- その PC も **Intel 5300** なら、supplementary の injection ツールでクリーンに送信:
-  ```bash
-  sudo ~/linux-80211n-csitool-supplementary/injection/setup_inject.sh wlan1 64 HT20
-  sudo ~/linux-80211n-csitool-supplementary/injection/random_packets 100000 100 1 ff:ff:ff:ff:ff:ff
-  ```
-- 5300 でない普通の PC でも、同一チャンネルで HT トラフィックを出せれば受信側で CSI は取れる
-  （例: 送信側と受信側を同じ AP に繋いで iperf/ping）。
-  ただし受信側 5300 のアソシエーション問題があるため、**injection（送信側 5300）構成が最も確実**。
+**受信側(RX) — CSI を記録:**
+```bash
+cd ~/linux-80211n-csitool-supplementary/injection
+sudo ./setup_monitor_csi.sh 64 HT20          # モニターモード, ch64(5GHz), HT20
+sudo ../netlink/log_to_file ~/csi.dat         # 記録開始（あとで Ctrl+C）
+```
 
-詳細は supplementary リポジトリの `injection/` 内 README を参照。
+**送信側(TX) — パケット注入:**
+```bash
+cd ~/linux-80211n-csitool-supplementary/injection
+sudo ./setup_inject.sh 64 HT20               # ★ RX と同じ ch/帯域に合わせる
+echo 0x4101 | sudo tee `find /sys -name monitor_tx_rate`    # 送信レート
+sudo ./random_packets 100000 100 1 1000      # 個数 長さ モード(1=注入MAC) 間隔µs
+```
+
+- `random_packets <個数> <長さ> <モード:0=自MAC/1=注入MAC> <間隔µs>`
+- 疎通テストはまず少量で: `sudo ./random_packets 10 100 1`
+- **送受信で channel(64) と帯域(HT20) を必ず一致**させること。ズレると1パケットも受からない。
+
+> 5300 が1台しか無い場合は AP 接続方式(4-A)になるが、アソシエーション問題に当たりやすい。
+> injection（5300×2）が最も確実。詳細は supplementary の `injection/README`。
 
 ---
 
