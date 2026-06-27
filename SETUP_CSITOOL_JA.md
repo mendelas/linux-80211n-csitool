@@ -179,6 +179,53 @@ csi = get_scaled_csi(csi_entry);         % [Ntx × Nrx × 30サブキャリア] 
 
 ---
 
+## 5.5 オフライン運用のための事前準備（要ネット作業を先に済ませる）
+
+> ⚠️ **ファームウェアは全カーネル共通（`/lib/firmware/`）。** CSI ファームに差し替えると
+> どのカーネルで起動しても通常 WiFi が使えなくなる（CSI ファームは AP 接続が不安定なため）。
+> よって「ネットが要る作業（apt / git / ビルド）」は**標準ファーム・通常カーネル・WiFi 接続中に
+> 全部済ませて**から、最後に CSI ファームへ切り替えるのが鉄則。
+
+各ラップトップで、WiFi が使えるうちに以下を実行（両機とも同一でOK＝どちらも TX/RX 兼用にできる）:
+
+```bash
+# Part 1: パッケージ（要ネット）
+sudo apt-get update
+sudo apt-get install -y build-essential libncurses5-dev git-core libpcap-dev octave
+
+# Part 2: リポジトリ（要ネット）
+cd ~
+git clone https://github.com/mendelas/linux-80211n-csitool.git
+git clone https://github.com/dhalperi/linux-80211n-csitool-supplementary.git
+git clone https://github.com/dhalperi/lorcon-old.git
+
+# Part 3: ビルド（ネット不要、今のうちに）
+cd ~/linux-80211n-csitool && cp /boot/config-$(uname -r) .config && yes '' | make oldconfig
+make -j$(nproc) && sudo make modules_install && sudo make install   # 3.5.7 カーネル
+make -C ~/linux-80211n-csitool-supplementary/netlink                # log_to_file
+cd ~/lorcon-old && ./configure && make && sudo make install && sudo ldconfig   # LORCON
+cd ~/linux-80211n-csitool-supplementary/injection && make           # random_packets
+
+# Part 4: CSI ファームを置くだけ（まだ有効化しない＝WiFi は維持）
+sudo cp ~/linux-80211n-csitool-supplementary/firmware/iwlwifi-5000-2.ucode.sigcomm2010 /lib/firmware/
+```
+
+**全準備が終わってから** CSI モードへ切替（以降ネット不要）:
+```bash
+sudo mv /lib/firmware/iwlwifi-5000-2.ucode /lib/firmware/iwlwifi-5000-2.ucode.orig
+sudo ln -s iwlwifi-5000-2.ucode.sigcomm2010 /lib/firmware/iwlwifi-5000-2.ucode
+sudo reboot    # → GRUB で Linux 3.5.7+
+```
+
+**標準ファームに戻して WiFi を復活**させたいとき（ネットが再度必要になったら）:
+```bash
+sudo rm -f /lib/firmware/iwlwifi-5000-2.ucode
+for f in /lib/firmware/iwlwifi-5000-*.ucode.orig; do sudo mv -f "$f" "${f%.orig}"; done
+# → 3.13 など通常カーネルで起動すれば WiFi が戻る
+```
+
+---
+
 ## 6. トラブルシューティング早見表
 
 | 症状 | 原因 / 対処 |
@@ -190,6 +237,8 @@ csi = get_scaled_csi(csi_entry);         % [Ntx × Nrx × 30サブキャリア] 
 | `modinfo` に `connector_log` が無い | 3.5.7+ 以外で起動している。GRUB で選び直す |
 | `auth_failures` でアソシエーション失敗 | CSI ファームの既知問題。モニターモード(4-B)へ |
 | `Soft blocked: yes`（rfkill） | `sudo rfkill unblock wifi` |
+| 通常カーネルでも WiFi が繋がらなくなった | CSI ファームに差し替えた影響（FW は全カーネル共通）。5.5 の「標準ファームに戻す」を実行 |
+| LORCON ビルドに WiFi が必要 | ネット作業は標準ファーム時に先に済ませる（5.5 参照）。有線/USBテザリングでも可 |
 
 ---
 
