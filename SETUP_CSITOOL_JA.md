@@ -196,7 +196,7 @@ sudo service network-manager stop 2>/dev/null
 sudo iw dev mon0 del 2>/dev/null
 sudo modprobe -r iwlwifi mac80211 cfg80211 2>/dev/null
 sudo modprobe iwlwifi; sleep 1
-sudo iw reg set JP
+sudo iw reg set JP; sleep 2
 sudo ifconfig "$IF" down
 sudo iw dev "$IF" interface add mon0 type monitor
 sudo ifconfig mon0 up
@@ -214,7 +214,7 @@ IF=${1:-wlan1}; OUT=${2:-$HOME/csi.dat}; CH=48; BW="HT40-"
 sudo service network-manager stop 2>/dev/null
 sudo modprobe -r iwlwifi mac80211 cfg80211 2>/dev/null
 sudo modprobe iwlwifi connector_log=0x1; sleep 1
-sudo iw reg set JP
+sudo iw reg set JP; sleep 2
 sudo ifconfig "$IF" down
 sudo iwconfig "$IF" mode monitor
 sudo ifconfig "$IF" up
@@ -244,6 +244,7 @@ CH=161; BW="HT40-"        # 中心5795MHz
 ```
 > ⚠️ 5.8GHz は日本の通常WiFi帯域外。**屋外/開放空間では絶対に使わない**こと。暗室・シールドボックス限定。
 > `iw set channel 161 HT40-` が `command failed` なら、古い regdb が UNII-3 未対応の可能性 → ch48 にするか regdb 更新が必要。
+> また `iw reg set` 直後は CRDA 反映前に `set channel` が走ると無言で失敗するので、**`iw reg set` の後に `sleep 2`** を入れること（設定後 `iw dev <if> info | grep channel` で必ず確認）。
 
 ---
 
