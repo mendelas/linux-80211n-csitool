@@ -162,7 +162,7 @@ sudo ../netlink/log_to_file ~/csi.dat         # 記録開始（あとで Ctrl+C�
 ```bash
 cd ~/linux-80211n-csitool-supplementary/injection
 sudo ./setup_inject.sh 64 HT20               # ★ RX と同じ ch/帯域に合わせる
-echo 0x4101 | sudo tee `find /sys -name monitor_tx_rate`    # 送信レート
+echo 0x4101 | sudo tee $(sudo find /sys/kernel/debug -name monitor_tx_rate)   # 送信レート（find にも sudo 必須）
 sudo ./random_packets 100000 100 1 1000      # 個数 長さ モード(1=注入MAC) 間隔µs
 ```
 
@@ -250,6 +250,7 @@ for f in /lib/firmware/iwlwifi-5000-*.ucode.orig; do sudo mv -f "$f" "${f%.orig}
 | LORCON ビルドに WiFi が必要 | ネット作業は標準ファーム時に先に済ませる（5.5 参照）。有線/USBテザリングでも可 |
 | `modprobe iwlwifi debug=...` が `invalid argument` | `CONFIG_IWLWIFI_DEBUG` 無効ビルド。`debug` param が無い。kernel を 2-2 の設定で再ビルド、または `setup_inject.sh` から `debug=0x40000` を削除 |
 | `monitor_tx_rate` が `find /sys` で出ない | `CONFIG_IWLWIFI_DEBUGFS` 無効ビルド。2-2 の設定（DEBUG_FS/MAC80211_DEBUGFS/IWLWIFI_DEBUG/IWLWIFI_DEBUGFS=y）で**再ビルド必須**（injection の送信レート固定に必要） |
+| `tee \`find /sys ...\`` が `no such file` | バックチック内の `find` が非 root で debugfs を辿れない。`$(sudo find /sys/kernel/debug -name monitor_tx_rate)` と find にも sudo を付ける |
 
 ---
 
