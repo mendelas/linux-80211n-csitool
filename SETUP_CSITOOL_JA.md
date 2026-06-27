@@ -184,14 +184,14 @@ sudo ./random_packets 100000 100 1 1000      # 個数 長さ モード(1=注入M
 
 ## 4-C. 推奨キャプチャ設定（日本・ch48/5.24GHz）とスクリプト
 
-日本で合法に injection できる最高周波数は **ch48 = 5.240 GHz（W52, 非DFS）**
+日本で合法に injection できる最高周波数は **ch48 = 5.240 GHz（W52, 非DFS）**。HT40 は **`HT40-`（副ch=44）** で W52 内に収める（`HT40+` は ch52/W53(DFS) に入り送信不可）
 （W53/W56 は DFS で送信不可、W58/5.8GHz は日本では使用不可）。
 よく使う設定（1000 pkt/s・最小ペイロード・約20秒）をスクリプト化しておくと楽。
 
 **TX 機: `~/tx_capture.sh`**
 ```bash
 #!/bin/bash
-IF=${1:-wlan1}; CH=48; RATE=0x4101; NPKTS=20000; PAYLOAD=1; DELAY=1000
+IF=${1:-wlan1}; CH=48; BW="HT40-"; RATE=0x4901; NPKTS=20000; PAYLOAD=1; DELAY=1000
 sudo service network-manager stop 2>/dev/null
 sudo iw dev mon0 del 2>/dev/null
 sudo modprobe -r iwlwifi mac80211 cfg80211 2>/dev/null
@@ -200,7 +200,7 @@ sudo iw reg set JP
 sudo ifconfig "$IF" down
 sudo iw dev "$IF" interface add mon0 type monitor
 sudo ifconfig mon0 up
-sudo iw dev mon0 set channel $CH HT20
+sudo iw dev mon0 set channel $CH $BW
 iwconfig mon0
 echo $RATE | sudo tee $(sudo find /sys/kernel/debug -name monitor_tx_rate)
 cd ~/linux-80211n-csitool-supplementary/injection
@@ -210,7 +210,7 @@ sudo ./random_packets $NPKTS $PAYLOAD 1 $DELAY    # 引数: 個数 長さ モー
 **RX 機: `~/rx_capture.sh`**
 ```bash
 #!/bin/bash
-IF=${1:-wlan1}; OUT=${2:-$HOME/csi.dat}; CH=48
+IF=${1:-wlan1}; OUT=${2:-$HOME/csi.dat}; CH=48; BW="HT40-"
 sudo service network-manager stop 2>/dev/null
 sudo modprobe -r iwlwifi mac80211 cfg80211 2>/dev/null
 sudo modprobe iwlwifi connector_log=0x1; sleep 1
@@ -218,7 +218,7 @@ sudo iw reg set JP
 sudo ifconfig "$IF" down
 sudo iwconfig "$IF" mode monitor
 sudo ifconfig "$IF" up
-sudo iw dev "$IF" set channel $CH HT20
+sudo iw dev "$IF" set channel $CH $BW
 iwconfig "$IF"
 sudo ~/linux-80211n-csitool-supplementary/netlink/log_to_file "$OUT"   # Ctrl+C で停止
 ```
@@ -231,7 +231,8 @@ sudo ~/linux-80211n-csitool-supplementary/netlink/log_to_file "$OUT"   # Ctrl+C 
 | パケットレート | `DELAY`（µs。1000→1000pkt/s, 2000→500pkt/s） |
 | チャンネル | `CH`（両機一致必須） |
 | ペイロード | `PAYLOAD`（不安定なら 10 に） |
-| 変調レート | `RATE`（0x4101=MCS1。0x4100=MCS0 等） |
+| 変調レート | `RATE`（0x4901=MCS1/HT40。HT20なら0x4101。40MHzビット=0x800） |
+| 帯域幅 | `BW`（HT40- / HT20。両機一致必須） |
 
 ---
 
