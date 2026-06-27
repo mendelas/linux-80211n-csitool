@@ -228,8 +228,13 @@ sudo cp ~/linux-80211n-csitool-supplementary/firmware/iwlwifi-5000-2.ucode.sigco
 
 **全準備が終わってから** CSI モードへ切替（以降ネット不要）:
 ```bash
-sudo mv /lib/firmware/iwlwifi-5000-2.ucode /lib/firmware/iwlwifi-5000-2.ucode.orig
-sudo ln -s iwlwifi-5000-2.ucode.sigcomm2010 /lib/firmware/iwlwifi-5000-2.ucode
+# ★ ドライバは API max=5 なので iwlwifi-5000-5.ucode を最優先で読む。
+#   標準の -5/-3/-1 等が残っていると CSI(-2) が読まれず、受信できても csi.dat が 0 になる。
+#   → CSI の -2 だけ残し、他の .ucode は全部退避する。
+sudo rm -f /lib/firmware/iwlwifi-5000-2.ucode
+for f in /lib/firmware/iwlwifi-5000-*.ucode; do sudo mv -f "$f" "$f.standard"; done
+sudo ln -sf iwlwifi-5000-2.ucode.sigcomm2010 /lib/firmware/iwlwifi-5000-2.ucode
+ls -l /lib/firmware/iwlwifi-5000-*.ucode   # 残る .ucode は -2(CSIリンク) だけ
 sudo reboot    # → GRUB で Linux 3.5.7+
 ```
 
@@ -252,7 +257,8 @@ for f in /lib/firmware/iwlwifi-5000-*.ucode.orig; do sudo mv -f "$f" "${f%.orig}
 | `mkdir cannot create '/lib/modules/...' permission denied` | `sudo make modules_install` で実行 |
 | `modinfo` に `connector_log` が無い | 3.5.7+ 以外で起動している。GRUB で選び直す |
 | `auth_failures` でアソシエーション失敗 | CSI ファームの既知問題。モニターモード(4-B)へ |
-| 受信(tcpdump)はできるのに `csi.dat` が **0 バイト** | **connector ID 不一致**（フルカーネルビルド時の定番）。カーネル=`CN_NETLINK_USERS(10)+0xf=25`、log_to_file=libcヘッダ(11)+0xf=26 でズレる。`sed -i 's@CN_NETLINK_USERS + 0xf@10 + 0xf@' netlink/iwl_connector.h` して `make` で再ビルド。確認: `grep CN_NETLINK_USERS /usr/include/linux/connector.h` が 10 以外なら該当 |
+| 受信(tcpdump)はできるのに `csi.dat` が **0 バイト**（その1） | **ドライバが標準ファームを読んでいる**。API max=5 なので `iwlwifi-5000-5.ucode`(標準)が残っていると CSI(-2) が使われない。`-2` 以外の `*.ucode` を全部 `.standard` 等に退避し、iwlwifi 再ロード。`dmesg | grep -i ucode` で `-2` を読んでいるか確認 |
+| 受信(tcpdump)はできるのに `csi.dat` が **0 バイト**（その2） | **connector ID 不一致**（フルカーネルビルド時の定番）。カーネル=`CN_NETLINK_USERS(10)+0xf=25`、log_to_file=libcヘッダ(11)+0xf=26 でズレる。`sed -i 's@CN_NETLINK_USERS + 0xf@10 + 0xf@' netlink/iwl_connector.h` して `make -B` で再ビルド。確認: `grep CN_NETLINK_USERS /usr/include/linux/connector.h` が 10 以外なら該当 |
 | `Soft blocked: yes`（rfkill） | `sudo rfkill unblock wifi` |
 | 通常カーネルでも WiFi が繋がらなくなった | CSI ファームに差し替えた影響（FW は全カーネル共通）。5.5 の「標準ファームに戻す」を実行 |
 | LORCON ビルドに WiFi が必要 | ネット作業は標準ファーム時に先に済ませる（5.5 参照）。有線/USBテザリングでも可 |
