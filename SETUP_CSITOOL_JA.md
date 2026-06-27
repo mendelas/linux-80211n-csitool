@@ -52,7 +52,16 @@ sudo apt-get install build-essential libncurses5-dev git-core
 # 2-2. 設定ファイル(.config) を現在のカーネルから流用
 cd ~/linux-80211n-csitool
 cp /boot/config-$(uname -r) .config
+
+# ★ injection に必須の debug/debugfs を有効化（これを忘れると monitor_tx_rate が出ない）
+scripts/config --enable DEBUG_FS
+scripts/config --enable MAC80211_DEBUGFS
+scripts/config --enable IWLWIFI_DEBUG
+scripts/config --enable IWLWIFI_DEBUGFS
+
 yes '' | make oldconfig          # 質問はすべてデフォルトで自動回答
+# 確認（4つとも =y であること）
+grep -E 'CONFIG_DEBUG_FS=|CONFIG_MAC80211_DEBUGFS=|CONFIG_IWLWIFI_DEBUG=|CONFIG_IWLWIFI_DEBUGFS=' .config
 
 # 2-3. ビルド（古い PC で 30〜60 分）
 make -j$(nproc)
@@ -239,6 +248,8 @@ for f in /lib/firmware/iwlwifi-5000-*.ucode.orig; do sudo mv -f "$f" "${f%.orig}
 | `Soft blocked: yes`（rfkill） | `sudo rfkill unblock wifi` |
 | 通常カーネルでも WiFi が繋がらなくなった | CSI ファームに差し替えた影響（FW は全カーネル共通）。5.5 の「標準ファームに戻す」を実行 |
 | LORCON ビルドに WiFi が必要 | ネット作業は標準ファーム時に先に済ませる（5.5 参照）。有線/USBテザリングでも可 |
+| `modprobe iwlwifi debug=...` が `invalid argument` | `CONFIG_IWLWIFI_DEBUG` 無効ビルド。`debug` param が無い。kernel を 2-2 の設定で再ビルド、または `setup_inject.sh` から `debug=0x40000` を削除 |
+| `monitor_tx_rate` が `find /sys` で出ない | `CONFIG_IWLWIFI_DEBUGFS` 無効ビルド。2-2 の設定（DEBUG_FS/MAC80211_DEBUGFS/IWLWIFI_DEBUG/IWLWIFI_DEBUGFS=y）で**再ビルド必須**（injection の送信レート固定に必要） |
 
 ---
 
