@@ -234,6 +234,17 @@ sudo ~/linux-80211n-csitool-supplementary/netlink/log_to_file "$OUT"   # Ctrl+C 
 | 変調レート | `RATE`（0x4901=MCS1/HT40。HT20なら0x4101。40MHzビット=0x800） |
 | 帯域幅 | `BW`（HT40- / HT20。両機一致必須） |
 
+### 電波暗室で使う場合（5.8GHz / 40MHz）
+**シールド環境（電波暗室等）に限り**、規制制約が外れるので 5300 のハード上限近くまで使える。
+5300 の上限は **ch165 = 5825 MHz（5.8GHz帯。6GHz非対応）**。40MHz の最高は **ch161 HT40-（157+161, 中心5795MHz）**。
+UNII-3(149-165) は非DFSなので `iw reg set US` で解放すれば injection 送信可。スクリプトの変数を:
+```bash
+CH=161; BW="HT40-"        # 中心5795MHz
+# さらに各スクリプトの modprobe 後に: sudo iw reg set US
+```
+> ⚠️ 5.8GHz は日本の通常WiFi帯域外。**屋外/開放空間では絶対に使わない**こと。暗室・シールドボックス限定。
+> `iw set channel 161 HT40-` が `command failed` なら、古い regdb が UNII-3 未対応の可能性 → ch48 にするか regdb 更新が必要。
+
 ---
 
 ## 5. 解析（MATLAB / Octave）
