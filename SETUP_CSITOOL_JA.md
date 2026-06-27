@@ -102,6 +102,13 @@ for f in /lib/firmware/iwlwifi-5000-*.ucode; do sudo mv "$f" "$f.orig"; done
 sudo cp ~/linux-80211n-csitool-supplementary/firmware/iwlwifi-5000-2.ucode.sigcomm2010 /lib/firmware/
 sudo ln -s iwlwifi-5000-2.ucode.sigcomm2010 /lib/firmware/iwlwifi-5000-2.ucode
 
+# ★ connector ID をカーネルに合わせる（フルカーネルビルド時に必須）
+#   このツリーは CN_NETLINK_USERS=10 → CN_IDX_IWLAGN=10+0xf=25 で CSI を送る。
+#   一方 log_to_file は libc ヘッダ(/usr/include/linux/connector.h, Ubuntu14.04 では 11)
+#   を使うため 26 になり、netlink グループが噛み合わず CSI が 0 バイトになる。
+#   → log_to_file 側を 10 に固定して一致させる。
+sed -i 's@CN_NETLINK_USERS + 0xf@10 + 0xf@' ~/linux-80211n-csitool-supplementary/netlink/iwl_connector.h
+
 # 記録ツール log_to_file をビルド
 make -C ~/linux-80211n-csitool-supplementary/netlink
 ```
@@ -245,6 +252,7 @@ for f in /lib/firmware/iwlwifi-5000-*.ucode.orig; do sudo mv -f "$f" "${f%.orig}
 | `mkdir cannot create '/lib/modules/...' permission denied` | `sudo make modules_install` で実行 |
 | `modinfo` に `connector_log` が無い | 3.5.7+ 以外で起動している。GRUB で選び直す |
 | `auth_failures` でアソシエーション失敗 | CSI ファームの既知問題。モニターモード(4-B)へ |
+| 受信(tcpdump)はできるのに `csi.dat` が **0 バイト** | **connector ID 不一致**（フルカーネルビルド時の定番）。カーネル=`CN_NETLINK_USERS(10)+0xf=25`、log_to_file=libcヘッダ(11)+0xf=26 でズレる。`sed -i 's@CN_NETLINK_USERS + 0xf@10 + 0xf@' netlink/iwl_connector.h` して `make` で再ビルド。確認: `grep CN_NETLINK_USERS /usr/include/linux/connector.h` が 10 以外なら該当 |
 | `Soft blocked: yes`（rfkill） | `sudo rfkill unblock wifi` |
 | 通常カーネルでも WiFi が繋がらなくなった | CSI ファームに差し替えた影響（FW は全カーネル共通）。5.5 の「標準ファームに戻す」を実行 |
 | LORCON ビルドに WiFi が必要 | ネット作業は標準ファーム時に先に済ませる（5.5 参照）。有線/USBテザリングでも可 |
