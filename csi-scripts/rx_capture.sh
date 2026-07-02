@@ -1,6 +1,6 @@
 #!/bin/bash
-# Intel 5300 CSI RX (ch161/5.805GHz/HT20)  使い方: ~/rx_capture.sh <ラベル>
-CH=161
+# Intel 5300 CSI RX (ch48/5.240GHz/HT20)  使い方: ~/rx_capture.sh <ラベル>
+CH=48
 BW="HT20"
 LABEL=${1:-csi}
 IF=wlan1
