@@ -1,6 +1,6 @@
 #!/bin/bash
-# Intel 5300 CSI injection TX (ch165/5.825GHz/HT20)  使い方: ~/tx_capture.sh
-CH=165
+# Intel 5300 CSI injection TX (ch48/5.24GHz/HT20)  使い方: ~/tx_capture.sh
+CH=48
 BW="HT20"
 RATE=0x4101
 NPKTS=300000
