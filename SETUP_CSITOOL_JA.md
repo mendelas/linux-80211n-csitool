@@ -6,6 +6,8 @@ Linux 802.11n CSI Tool（Halperin et al., University of Washington）を、
 
 > 対象リポジトリ: このリポジトリ（= Linux 3.5.7 カーネルソース + CSI 対応 iwlwifi ドライバ）
 > 別途必要: [linux-80211n-csitool-supplementary](https://github.com/dhalperi/linux-80211n-csitool-supplementary)（ファームウェア・記録/解析ツール）
+>
+> 実機ごとの進捗記録: PC4/5/6 は [SETUP_PC456_JA.md](SETUP_PC456_JA.md)（NIC 換装前までの作業記録＋換装後の残作業）
 
 ---
 
@@ -282,7 +284,13 @@ git clone https://github.com/dhalperi/linux-80211n-csitool-supplementary.git
 git clone https://github.com/dhalperi/lorcon-old.git
 
 # Part 3: ビルド（ネット不要、今のうちに）
-cd ~/linux-80211n-csitool && cp /boot/config-$(uname -r) .config && yes '' | make oldconfig
+cd ~/linux-80211n-csitool && cp /boot/config-$(uname -r) .config
+# ★ 2-2 と同じ debugfs 設定を必ず入れる（忘れると monitor_tx_rate が無く injection 不可）
+scripts/config --enable DEBUG_FS
+scripts/config --enable MAC80211_DEBUGFS
+scripts/config --enable IWLWIFI_DEBUG
+scripts/config --enable IWLWIFI_DEBUGFS
+yes '' | make oldconfig
 make -j$(nproc) && sudo make modules_install && sudo make install   # 3.5.7 カーネル
 make -C ~/linux-80211n-csitool-supplementary/netlink                # log_to_file
 cd ~/lorcon-old && ./configure && make && sudo make install && sudo ldconfig   # LORCON
