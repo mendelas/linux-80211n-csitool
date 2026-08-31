@@ -8,10 +8,10 @@
 # ★ CH と BW は TX と完全一致させること。ズレると1パケットも受からない (エラーも出ない)
 # 保存先: ~/csi_data/YYYYMMDD/YYYYMMDD_HHMMSS_<ラベル>.csi
 
-CH=${CH:-161}                # TX と一致必須
-BW=${BW:-HT40-}              # TX と一致必須
-IF=${IF:-wlan1}
+CH=${CH:-157}                # TX と一致必須 (157 HT40+ = 中心5795MHz)
+BW=${BW:-HT40+}              # TX と一致必須。HT20 / HT40+ / HT40- のみ
 REG=${REG:-US}
+case "$BW" in HT20|HT40+|HT40-) ;; *) echo "!! BW='$BW' は不可。HT20 / HT40+ / HT40- のいずれか" >&2; exit 1;; esac
 LABEL=${1:-csi}
 
 echo "=== RX: ch$CH $BW / label=$LABEL ==="
@@ -20,6 +20,11 @@ sudo service network-manager stop 2>/dev/null
 sudo modprobe -r iwlwifi mac80211 cfg80211 2>/dev/null
 sudo modprobe iwlwifi connector_log=0x1
 sleep 3
+
+IF=${IF:-$(iw dev | awk '/Interface/{print $2; exit}')}
+[ -n "$IF" ] || { echo "!! 無線インタフェースが見つからない" >&2; exit 1; }
+echo "IF=$IF"
+
 sudo iw reg set "$REG"
 sleep 3
 sudo ifconfig "$IF" down
