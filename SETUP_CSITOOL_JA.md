@@ -177,76 +177,96 @@ sudo ./random_packets 100000 100 1 1000      # 個数 長さ モード(1=注入M
 
 - `random_packets <個数> <長さ> <モード:0=自MAC/1=注入MAC> <間隔µs>`
 - 疎通テストはまず少量で: `sudo ./random_packets 10 100 1`
-- **送受信で channel(64) と帯域(HT20) を必ず一致**させること。ズレると1パケットも受からない。
+- **送受信で channel と帯域を必ず一致**させること。ズレると1パケットも受からない。
+- ここでの `64 HT20` は上流 README の例示にすぎない（ch64 は W53 = DFS で日本では送信不可）。
+  **実際の運用は §4-C の標準設定（ch157 HT40+）と [csi-scripts/](csi-scripts/) のスクリプトに従う**こと。
 
 > 5300 が1台しか無い場合は AP 接続方式(4-A)になるが、アソシエーション問題に当たりやすい。
 > injection（5300×2）が最も確実。詳細は supplementary の `injection/README`。
 
 ---
 
-## 4-C. 推奨キャプチャ設定（日本・ch48/5.24GHz）とスクリプト
+## 4-C. 標準キャプチャ設定（ch157 HT40+ / 中心 5795 MHz）とスクリプト
 
-日本で合法に injection できる最高周波数は **ch48 = 5.240 GHz（W52, 非DFS）**。HT40 は **`HT40-`（副ch=44）** で W52 内に収める（`HT40+` は ch52/W53(DFS) に入り送信不可）
-（W53/W56 は DFS で送信不可、W58/5.8GHz は日本では使用不可）。
-よく使う設定（1000 pkt/s・最小ペイロード・約20秒）をスクリプト化しておくと楽。
+実際に使うスクリプトは **このリポジトリの [csi-scripts/](csi-scripts/) が正**（以下の記述はその要約）。
+以前この節に載せていたインライン版（ch48 固定・IF 引数）は古いので使わないこと。
 
-**TX 機: `~/tx_capture.sh`**
 ```bash
-#!/bin/bash
-IF=${1:-wlan1}; CH=48; BW="HT40-"; RATE=0x4901; NPKTS=20000; PAYLOAD=1; DELAY=1000
-sudo service network-manager stop 2>/dev/null
-sudo iw dev mon0 del 2>/dev/null
-sudo modprobe -r iwlwifi mac80211 cfg80211 2>/dev/null
-sudo modprobe iwlwifi; sleep 1
-sudo iw reg set JP; sleep 2
-sudo ifconfig "$IF" down
-sudo iw dev "$IF" interface add mon0 type monitor
-sudo ifconfig mon0 up
-sudo iw dev mon0 set channel $CH $BW
-iwconfig mon0
-echo $RATE | sudo tee $(sudo find /sys/kernel/debug -name monitor_tx_rate)
-cd ~/linux-80211n-csitool-supplementary/injection
-sudo ./random_packets $NPKTS $PAYLOAD 1 $DELAY    # 引数: 個数 長さ モード(1) 間隔us
+wget https://raw.githubusercontent.com/mendelas/linux-80211n-csitool/csitool-stable/csi-scripts/tx_capture.sh -O ~/tx_capture.sh
+wget https://raw.githubusercontent.com/mendelas/linux-80211n-csitool/csitool-stable/csi-scripts/rx_capture.sh -O ~/rx_capture.sh
+chmod +x ~/tx_capture.sh ~/rx_capture.sh
 ```
 
-**RX 機: `~/rx_capture.sh`**
+### 標準設定
+
+| 項目 | 値 | 備考 |
+|---|---|---|
+| 制御チャンネル | **157**（5785 MHz） | `CH` |
+| 帯域幅 | **HT40+**（拡張ch=161/5805、**中心 5795 MHz**） | `BW`。★`HT40` 単体は `iw` が受け付けない |
+| 規制ドメイン | `US` | UNII-3(149–165) をドライバ側で開放するため。`REG` |
+| MCS | 1（QPSK 1/2、1ストリーム） | `MCS`。RATE は BW と MCS から自動計算（MCS1/HT40 → 0x4901） |
+| 送信電力 | 15 dBm（1500 mBm） | `TXPOW`。第1引数でも指定可 |
+| パケット | 200000 発 / 10 byte / 1000 µs 間隔（=1000 pkt/s、約 200 秒） | `NPKTS` `PAYLOAD` `DELAY` |
+| インタフェース | 自動検出（`iw dev` の先頭） | `IF` で上書き可 |
+
+> `ch157 HT40+` と `ch161 HT40-` は**同じ 157+161 ペア（中心 5795 MHz）**だが、主 20MHz（制御ch）が
+> 逆になる。**送受で表記まで完全に一致**させること（`157 HT40+` に統一する）。
+
+### 使い方
+
 ```bash
-#!/bin/bash
-IF=${1:-wlan1}; OUT=${2:-$HOME/csi.dat}; CH=48; BW="HT40-"
-sudo service network-manager stop 2>/dev/null
-sudo modprobe -r iwlwifi mac80211 cfg80211 2>/dev/null
-sudo modprobe iwlwifi connector_log=0x1; sleep 1
-sudo iw reg set JP; sleep 2
-sudo ifconfig "$IF" down
-sudo iwconfig "$IF" mode monitor
-sudo ifconfig "$IF" up
-sudo iw dev "$IF" set channel $CH $BW
-iwconfig "$IF"
-sudo ~/linux-80211n-csitool-supplementary/netlink/log_to_file "$OUT"   # Ctrl+C で停止
+# ① RX 機（先に待機）  → ~/csi_data/YYYYMMDD/YYYYMMDD_HHMMSS_<ラベル>.csi
+~/rx_capture.sh walk01
+
+# ② TX 機
+~/tx_capture.sh                 # 既定 15dBm / MCS1
+~/tx_capture.sh 13dBm 3         # 13dBm, MCS3(16QAM 1/2)
+CH=48 BW=HT40- REG=JP ~/rx_capture.sh walk01_ch48   # 設定変更は環境変数で（送受とも同じ値に）
+
+# ③ RX を Ctrl+C → ls -l でサイズ >0 を確認
 ```
 
-**使う順番:** ① RX で `~/rx_capture.sh wlan1 ~/csi.dat`（待機）→ ② TX で `~/tx_capture.sh wlan1`（~20秒で終了）→ ③ RX を Ctrl+C → `ls -l ~/csi.dat`。
+- MCS は **0–7（1ストリーム）のみ**。8 以上は 2 ストリームになり CSI 行列の形が変わる。
+- 疎通テストは少量で: TX 側で `NPKTS=10 PAYLOAD=100 ~/tx_capture.sh`。
+- 送受で ch/帯域がズレると**エラーも出ずに 1 パケットも受からない**。実行後に両機で
+  `iw dev <if> info | grep channel` の `width` と `center1` が一致しているか必ず確認する。
 
-| 変えたい値 | スクリプトの変数 |
-|---|---|
-| 取得時間 | `NPKTS`（= 秒 × pkt/s） |
-| パケットレート | `DELAY`（µs。1000→1000pkt/s, 2000→500pkt/s） |
-| チャンネル | `CH`（両機一致必須） |
-| ペイロード | `PAYLOAD`（不安定なら 10 に） |
-| 変調レート | `RATE`（0x4901=MCS1/HT40。HT20なら0x4101。40MHzビット=0x800） |
-| 帯域幅 | `BW`（HT40- / HT20。両機一致必須） |
+### ⚠️ 電波法上の扱い（この設定は免許が要る）
 
-### 電波暗室で使う場合（5.8GHz / 40MHz）
-**シールド環境（電波暗室等）に限り**、規制制約が外れるので 5300 のハード上限近くまで使える。
-5300 の上限は **ch165 = 5825 MHz（5.8GHz帯。6GHz非対応）**。40MHz の最高は **ch161 HT40-（157+161, 中心5795MHz）**。
-UNII-3(149-165) は非DFSなので `iw reg set US` で解放すれば injection 送信可。スクリプトの変数を:
-```bash
-CH=161; BW="HT40-"        # 中心5795MHz
-# さらに各スクリプトの modprobe 後に: sudo iw reg set US
-```
-> ⚠️ 5.8GHz は日本の通常WiFi帯域外。**屋外/開放空間では絶対に使わない**こと。暗室・シールドボックス限定。
-> `iw set channel 161 HT40-` が `command failed` なら、古い regdb が UNII-3 未対応の可能性 → ch48 にするか regdb 更新が必要。
-> また `iw reg set` 直後は CRDA 反映前に `set channel` が走ると無言で失敗するので、**`iw reg set` の後に `sleep 2`** を入れること（設定後 `iw dev <if> info | grep channel` で必ず確認）。
+中心 5795 MHz（UNII-3）は**日本では Wi-Fi 用の割り当てが無く、ETC/DSRC の使用帯域（5.77–5.85 GHz、
+路側機の下りは 5.795/5.805/5.815/5.825 GHz）と重なる**。したがって開放空間で使うには次のいずれかが必要:
+
+1. **実験試験局の免許**（総合通信局に申請）… 開放空間で運用する場合は必須
+2. **電波暗室・シールドボックス内**での運用
+3. 免許不要で済ませるなら **`CH=48 BW=HT40- REG=JP`**（W52、非DFS、技適の範囲内）
+
+`iw reg set US` は**ドライバの送信制限を外すための操作にすぎず、法的根拠にはならない**。
+免許またはシールド環境が前提であることを忘れないこと。
+
+### 実験試験局 申請時の諸元（スクリプト既定値との対応）
+
+| 記載欄 | 標準設定での値 | 出どころ |
+|---|---|---|
+| 無線設備 | Intel WiFi Link 5300（IEEE 802.11n）+ CSI Tool 改造ファーム/ドライバ | — |
+| 周波数 | 中心 5795 MHz（157=5785 と 161=5805 のボンディング） | `CH=157` `BW=HT40+` |
+| 占有周波数帯幅 | 40 MHz | `BW=HT40+` |
+| 変調方式 | OFDM、BPSK〜64QAM（MCS0–7、1ストリーム） | `MCS` |
+| 空中線電力 | 15 dBm ≒ 31.6 mW（引数で可変。カード EEPROM 上限まで） | `TXPOW=1500` |
+| 空中線 | ノート内蔵アンテナ 2〜3 本（利得は実測/カタログ値） | [SETUP_PC456_JA.md](SETUP_PC456_JA.md) §5 |
+| 通信の相手方 | 自局の受信設備（片方向の一斉送信） | injection 方式 |
+
+- **RX 側は免許不要。** monitor モードで受信しかせず、送信設備を含まないため無線局に当たらない。
+  スクリプトが `service network-manager stop` で送信の可能性を断っていることが担保。
+  → **申請は TX 機のみ**で行う。
+- **電波の型式の記号**（`40M0X7W` 等）は分類で決まるため、管轄の総合通信局に照会して確定させること。
+- 空中線電力は「`iw set txpower` の設定値」ではなく**空中線端の実際の出力**を記載する必要がある。
+  5300 は EEPROM 上限で頭打ちになるので、申請前に実測するか上限値で申請するのが無難。
+
+### トラブル
+
+- `iw set channel 157 HT40+` が `command failed` → 古い regdb が UNII-3 未対応の可能性。regdb 更新か `CH=48` に退避。
+- `iw reg set` 直後に `set channel` が走ると**無言で失敗**する（CRDA 反映待ち）。スクリプトは `sleep 3` を挟んである。
+- 5300 のハード上限は **ch165 = 5825 MHz**（6 GHz 非対応）。40 MHz の最高が本設定（157+161）。
 
 ---
 

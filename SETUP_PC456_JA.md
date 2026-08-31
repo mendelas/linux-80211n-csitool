@@ -187,8 +187,9 @@ ls -l /lib/firmware/iwlwifi-5000-*.ucode   # 残る .ucode は -2（CSI リン�
 2. §3 の基準でファーム切替を判断・実施 → `sudo reboot`（GRUB 固定済みなので 3.5.7+ で起動）
 3. `iwconfig` でインターフェース名を確認
    → 14.04 の udev 永続ルールにより、**新カードは `wlan1` になる想定**（旧カードの MAC が `wlan0` を占有）。
-   スクリプトは `IF=wlan1` 前提なのでそのまま動くはず。`wlan0` にしたい場合は
-   `/etc/udev/rules.d/70-persistent-net.rules` から旧カードの行を削除して再起動。
+   スクリプトは `iw dev` の先頭を自動検出するので名前に依らず動くが、無線 IF が複数
+   見えていると意図しない方を掴む。その場合は `IF=wlan1 ~/tx_capture.sh` と明示する。
+   `wlan0` に戻したい場合は `/etc/udev/rules.d/70-persistent-net.rules` から旧カードの行を削除して再起動。
 4. `sudo modprobe iwlwifi && dmesg | grep -i ucode` → **`-2` (sigcomm2010)** を読んでいること
 5. `sudo find /sys/kernel/debug -name monitor_tx_rate` → パスが出ること（TX に必須）
 6. 2 台揃ったら疎通テスト:
@@ -212,19 +213,27 @@ ls -l /lib/firmware/iwlwifi-5000-*.ucode   # 残る .ucode は -2（CSI リン�
 ## 6. キャプチャスクリプトのデフォルト設定に関する注意
 
 [csi-scripts/tx_capture.sh](csi-scripts/tx_capture.sh) / [csi-scripts/rx_capture.sh](csi-scripts/rx_capture.sh)
-の現在のデフォルトは:
+の現在のデフォルト（= **標準設定**）は:
 
 | 項目 | 値 | 備考 |
 |---|---|---|
-| CH | 165 (5.825 GHz) | **電波暗室・シールドボックス専用** |
-| BW | HT20 | |
+| CH | 157（5785 MHz） | 制御チャンネル |
+| BW | HT40+（拡張ch=161、**中心 5795 MHz**） | ★`HT40` 単体は `iw` がエラーにする |
 | 規制ドメイン | `iw reg set US` | UNII-3 を開放するため |
-| RATE | 0x4101 | MCS1 / HT20 |
-| IF | wlan1 | |
+| RATE | 自動計算（MCS1/HT40 → 0x4901） | `MCS` から算出。直接指定も可 |
+| 送信電力 | 15 dBm（1500 mBm） | 第1引数で変更可 |
+| IF | 自動検出（`iw dev` の先頭） | `IF=` で上書き可 |
 
-**通常の室内で使う場合は必ず `CH=48` / `iw reg set JP` に書き換える**こと
-（5.8 GHz は日本の通常 WiFi 帯域外。屋外・開放空間では使用不可）。
+**この設定（中心 5795 MHz / UNII-3）は日本では Wi-Fi 用の割り当てが無く、ETC/DSRC の帯域と重なる。**
+運用は **① 実験試験局の免許を取得**（開放空間で使う場合は必須）、または **② 電波暗室・シールドボックス内**
+のいずれかに限ること。免許不要で済ませたい場合は環境変数で
+**`CH=48 BW=HT40- REG=JP`**（W52、非DFS、技適の範囲内）に退避する。
+
+> `iw reg set US` はドライバの送信制限を外す操作にすぎず、法的根拠にはならない。
+> 詳細は [SETUP_CSITOOL_JA.md](SETUP_CSITOOL_JA.md) §4-C（申請時の諸元表も同節）。
+
 送受で ch / 帯域が食い違うと 1 パケットも受からず、原因切り分けで時間を浪費する。
+実行後に両機で `iw dev <if> info | grep channel` の `width` と `center1` の一致を必ず確認すること。
 
 ---
 
