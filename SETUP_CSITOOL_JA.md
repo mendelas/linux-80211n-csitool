@@ -5,7 +5,8 @@ Linux 802.11n CSI Tool（Halperin et al., University of Washington）を、
 動かすための実践メモ。ツール本体は **無改変** で使う前提。
 
 > 対象リポジトリ: このリポジトリ（= Linux 3.5.7 カーネルソース + CSI 対応 iwlwifi ドライバ）
-> 別途必要: [linux-80211n-csitool-supplementary](https://github.com/dhalperi/linux-80211n-csitool-supplementary)（ファームウェア・記録/解析ツール）
+> 別途必要: [linux-80211n-csitool-supplementary](https://github.com/mendelas/linux-80211n-csitool-supplementary)（ファームウェア・記録/解析ツール）
+> ★ **必ずこの fork を使う**こと。upstream (dhalperi) には `multi-rx/`（制御PCからの複数RX同時取得一式）が無い。
 >
 > 実機ごとの進捗記録: PC4/5/6 は [SETUP_PC456_JA.md](SETUP_PC456_JA.md)（NIC 換装前までの作業記録＋換装後の残作業）
 
@@ -97,7 +98,7 @@ lsmod | grep iwlwifi                  # 読み込まれていること
 
 ```bash
 cd ~
-git clone https://github.com/dhalperi/linux-80211n-csitool-supplementary.git
+git clone https://github.com/mendelas/linux-80211n-csitool-supplementary.git   # ★fork。upstream には multi-rx が無い
 
 # CSI 対応ファームウェアを配置（標準 FW は .orig に退避）
 for f in /lib/firmware/iwlwifi-5000-*.ucode; do sudo mv "$f" "$f.orig"; done
@@ -251,7 +252,7 @@ CH=48 BW=HT40- REG=JP ~/rx_capture.sh walk01_ch48   # 設定変更は環境変�
 | 周波数 | 中心 5795 MHz（157=5785 と 161=5805 のボンディング） | `CH=157` `BW=HT40+` |
 | 占有周波数帯幅 | 40 MHz | `BW=HT40+` |
 | 変調方式 | OFDM、BPSK〜64QAM（MCS0–7、1ストリーム） | `MCS` |
-| 空中線電力 | 15 dBm ≒ 31.6 mW（引数で可変。カード EEPROM 上限まで） | `TXPOW=1500` |
+| 空中線電力 | **指定事項 25 mW**。設定は 15 dBm（=カード最大）だが、空中線端の実測は 25 mW 未満で指定内 | `TXPOW=1500` |
 | 空中線 | ノート内蔵アンテナ 2〜3 本（利得は実測/カタログ値） | [SETUP_PC456_JA.md](SETUP_PC456_JA.md) §5 |
 | 通信の相手方 | 自局の受信設備（片方向の一斉送信） | injection 方式 |
 
@@ -260,7 +261,10 @@ CH=48 BW=HT40- REG=JP ~/rx_capture.sh walk01_ch48   # 設定変更は環境変�
   → **申請は TX 機のみ**で行う。
 - **電波の型式の記号**（`40M0X7W` 等）は分類で決まるため、管轄の総合通信局に照会して確定させること。
 - 空中線電力は「`iw set txpower` の設定値」ではなく**空中線端の実際の出力**を記載する必要がある。
-  5300 は EEPROM 上限で頭打ちになるので、申請前に実測するか上限値で申請するのが無難。
+  5300 は EEPROM 上限（`max_power_avg`, ~15–16 dBm）で頭打ちになるため、`TXPOW=1500`（15 dBm、
+  名目 31.6 mW）を指定しても実出力はそこまで出ない。**実測の結果 25 mW に届かなかった**ので、
+  指定事項 25 mW に対して**最大設定のまま運用してよい**（電力を下げる運用上の理由は無い）。
+  → スクリプトは全機 `15 dBm` 固定でよい。
 
 ### トラブル
 
@@ -300,7 +304,7 @@ sudo apt-get install -y build-essential libncurses5-dev git-core libpcap-dev oct
 # Part 2: リポジトリ（要ネット）
 cd ~
 git clone https://github.com/mendelas/linux-80211n-csitool.git
-git clone https://github.com/dhalperi/linux-80211n-csitool-supplementary.git
+git clone https://github.com/mendelas/linux-80211n-csitool-supplementary.git   # ★fork。upstream には multi-rx が無い
 git clone https://github.com/dhalperi/lorcon-old.git
 
 # Part 3: ビルド（ネット不要、今のうちに）
